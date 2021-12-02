@@ -1,68 +1,87 @@
 # -*- coding: utf-8 -*-
+
+# Cloud Fiarestoreのドキュメントも合わせて参照
+# https://firebase.google.com/docs/firestore/quickstart?hl=ja#python
 import firebase_admin
 from firebase_admin import credentials
 from firebase_admin import firestore
 
-import time
+import time # sleep関数を使うため
 import RPi.GPIO as GPIO
 import smbus
 import datetime
 import json
-import os
+import os #環境変数をセットするため
+import BME280 #温度センサモジュール
 
-os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = "/home/pi/syspro-chapter8.json"
+#秘密鍵のファイルを環境変数にセットする．
+os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = "/home/pi/syspro_firebase_secret.json"
 
-cred = credentials.Certificate('/home/pi/syspro-chapter8.json')
+#firestoreの事前準備
+cred = credentials.Certificate('/home/pi/syspro_firebase_secret.json')
 firebase_admin.initialize_app(cred)
+db = firestore.client()
+
 i2c = smbus.SMBus(1)
 address = 0x48
 
-GPIO.setmode(GPIO.BCM)
+GPIO.setmode(GPIO.BCM) #GPIO.BCM を指定した場合，ポートはGPIO番号で指定する
 GPIO.setup(14, GPIO.OUT)
-GPIO.output(14, GPIO.HIGH)
-time.sleep(1)
 GPIO.output(14, GPIO.LOW)
+time.sleep(1)
 
-db = firestore.Client()
-
-# コールバック関数を作成する
+# firestoreのコールバック関数を作成
 def on_snapshot(doc_snapshot, changes, read_time):
     for change in changes:
         print(u'New cmd: {}'.format(change.document.id))
         led = change.document.to_dict()["led"]
         print(u'LED: {}'.format(led))
-        if led == "ON":
-            print "ON"
-            # ONにする処理
-        elif led == "OFF":
-            print "OFF"
-            # OFFにする処理
+    if led == "ON":
+        print "ON"
+        # TODO1 LEDをON(GPIO14をHIGH)にする処理
+      
+
+    elif led == "OFF":
+        print "OFF"
+        # TODO1 LEDをOFF(GPIO14をLOW)にする処理
 
 
-on_ref = db.collection('led').where(u'led', u'==', u'ON')
-off_ref = db.collection('led').where(u'led', u'==', u'OFF')
-
-# 監視を開始する
-doc_watch = on_ref.on_snapshot(on_snapshot)
-doc_watch = off_ref.on_snapshot(on_snapshot)
+# コレクションled_status の中のドキュメントledの変更を監視する
+# ドキュメントledの内容に変更があった場合はコールバック関数on_snapshotが呼ばれる
+doc_ref = db.collection('led_status').document(u'led')
+doc_watch = doc_ref.on_snapshot(on_snapshot)
 
 # 温度湿度気圧センサから値を取得してFirestoreに送信する部分
 # 「'''」で囲まれた部分はコメントアウトされているので，参考にすること．
-'''
-while True:
-    #温度，湿度，気圧の値を取得する
-    #temp = 
-    #hum = 
-    #press = 
 
-    print("Temperature:%6.2f" %(temp))
-    print("Humidity:%6.2f" %(hum))
-    print("Pressure:%6.2f" %(press))
-    data = {"temp": temp, "hum": hum, "press":press}
-    db.collection('temperature').document(str(datetime.datetime.now())).set(data)
-    time.sleep(1)
+'''
+BME280.setup()
+BME280.get_calib_param()
+
+try:
+    while True:
+        #TODO2 温度，湿度，気圧の値を取得する
+        temp = 
+        humi = 
+        pres = 
+
+        print("Temperature:%6.2f" %(temp))
+        print("Humidity:%6.2f" %(humi))
+        print("Pressure:%6.2f" %(pres))
+        data = {"temp": temp, "humi": humi, "pres":pres}
+        db.collection('temperature').document(str(datetime.datetime.now())).set(data)
+        time.sleep(3)
+except KeyboardInterrupt:
+    print('KeyboardInterrupt')
+    GPIO.cleanup()
 '''
 
 # 温度センサと接続できないうちはこの無限ループを使う
-while True:
-    pass
+# 上記の温度センサのループを有効にした場合は，こちらをコメントアウトすること．
+try:
+    while 1:
+        pass
+except KeyboardInterrupt:
+    print('KeyboardInterrupt')
+    GPIO.cleanup()
+
